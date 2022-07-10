@@ -166,22 +166,23 @@ def loadCacheFile(path,name=".artrefcache.csv"):
     if os.path.exists(os.path.join(path, name)) and os.path.isfile(os.path.join(path, name)):
         with open(os.path.join(path,name),'r') as csvFile:
             csvReader = csv.reader(csvFile,delimiter=',')
-            isFirst = True
+            isFirst = False #NOTE: this is for disabling first line
             i = 0
             nb_doublon = 0
             for row in csvReader:
-                if isFirst:
-                    csvColumns = row
-                    isFirst=False
-                else:
-                    project_id = row[cacheColumns.index("project_id")]
-                    if (not project_id in artDictionnary):
-                        outList.append(row)
-                        artDictionnary[project_id] = i
-                        i += 1 
+                if len(row) > 0:
+                    if isFirst:
+                        csvColumns = row
+                        isFirst=False
                     else:
-                        nb_doublon += 1
-                        print(f"Double entry in cache file, line {i+nb_doublon} :\n{project_id} has been ignored")
+                        project_id = row[cacheColumns.index("project_id")]
+                        if (not project_id in artDictionnary):
+                            outList.append(row)
+                            artDictionnary[project_id] = i
+                            i += 1 
+                        else:
+                            nb_doublon += 1
+                            print(f"Double entry in cache file, line {i+nb_doublon} :\n{project_id} has been ignored")
     return outList,csvColumns,artDictionnary
 
 
@@ -376,18 +377,23 @@ def getProjectsFromPostSource(source, cacheObj):
 
 def getNamingVariables(jsonObj, asset,project):
     minIdCategory = jsonObj["categories"][0]["id"]
+    currentIndex = 0
+    minCategoryIndex = 0
     for cat in jsonObj["categories"]:
         if cat["id"] < minIdCategory:
             minIdCategory = cat["id"]
+            minCategoryIndex = currentIndex
+        currentIndex += 1
+            
     variables = {
         "artist": jsonObj["user"]["username"],
         "title": jsonObj["title"] if len(jsonObj["title"].split(' ')) <= 4 else jsonObj["slug"],
         "subtitle": asset["title"] if asset["title"] is not None else "" ,
         "likes": str(jsonObj["likes_count"]),
-        "source": "_".join(project[cacheColumns.index("protosources")]),
+        "source": "_".join(load(project[cacheColumns.index("protosources")],Loader=Loader)).replace("\\","-"),
         "size": project[cacheColumns.index("default_size")],
         "subId" : str(asset["position"]),
-        "category" : jsonObj[minIdCategory]["name"],
+        "category": jsonObj["categories"][minCategoryIndex]["name"],
         "views_count": str(jsonObj["views_count"]),
         "comments_count": str(jsonObj["comments_count"]),
         "ext" : "jpg"
@@ -415,7 +421,7 @@ def addImagesToList(imageList : list, jsonObj,projectIdx,projectObj, naming_conv
     return imageList
 
 def getProjectsIndexByStatus(cacheObj, status):
-    return [elementIndex for elementIndex in range(len(cacheObj[0])) if cacheObj[0][elementIndex][0] == status]
+    return [elementIndex for elementIndex in range(len(cacheObj[0])) if cacheObj[0][elementIndex][0] == str(status)]
 # ------------ main cli functions
 
 def logger(message,category):
@@ -473,8 +479,8 @@ def downloadPending(path,args=None,cache=None,preferedSize=None):
         response = requestObj.result()
         addImagesToList(images2BeDownloaded,
                 response.json(),
-                response.projectIdx,
-                cacheObj[0][response.projectIdx],
+                requestObj.projectIdx,
+                cacheObj[0][requestObj.projectIdx],
                 libSettings.get("namingConvention","{artist}_{title}_{source}")
                 )
 
@@ -492,7 +498,7 @@ def downloadPending(path,args=None,cache=None,preferedSize=None):
         with open(os.path.join(path,requestObj.imgName),'wb') as imgfile:
             imgfile.write(response.content)
         #set processed (write over with all other info from request)
-        cacheObj[0][response.projectIdx][cacheColumns.index("status")] = 1
+        cacheObj[0][requestObj.projectIdx][cacheColumns.index("status")] = 1
     return cacheObj
 
 def buildOverviewWebpage(path):
@@ -514,19 +520,19 @@ def exeCli(args):
         cache = ([],None,{}) if args.ignoreCache else None
         cache = fetchCache(args.path,args,cache= cache)
         if not args.dontUpdateCache:
-            saveCacheFile(args.path,cache)
+            saveCacheFile(args.path,cache[0])
     elif args.action == 'pull':
         cache = ([], None, {}) if args.ignoreCache else None
         cache = downloadPending(args.path,args,cache=cache,preferedSize=args.default_size)
         if not args.dontUpdateCache:
-            saveCacheFile(args.path, cache)
+            saveCacheFile(args.path, cache[0])
     elif args.action == 'update':
         cache = ([], None, {}) if args.ignoreCache else None
         cache = fetchCache(args.path, args, cache=cache)
         cache = downloadPending(
             args.path, args, cache=cache, preferedSize=args.default_size)
         if not args.dontUpdateCache:
-            saveCacheFile(args.path, cache)
+            saveCacheFile(args.path, cache[0])
     elif args.action == 'write2lib':
         config = loadLibrarySettings(args.path, 'sample_libSettings.yaml')
         if args.src is not None:
@@ -539,7 +545,7 @@ def exeCli(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Maintain a image reference librairy from artstation')
-    parser.add_argument("action", nargs=1, type=str,choices=['fetch','update','pull','creatLib','write2lib','help'],help='choose the specified action on the library',required=True)
+    parser.add_argument("action", nargs='?', type=str,choices=['fetch','update','pull','createLib','write2lib'],help='choose the specified action on the library')
     parser.add_argument(
         "--ignoreCache",action = "store_true", help="ignore the cache file during operations (for experienced user only)")
     parser.add_argument(
@@ -547,9 +553,9 @@ if __name__ == "__main__":
     parser.add_argument("--path",type=str,default='.')
     parser.add_argument("--src",type=str,action="append",nargs=2,metavar=("srcType","value"),help="when in [createLib,write2lib] mode, specify what sources to write to lib config file")
     parser.add_argument("--default_size",type=str,choices=['small','medium','large','4k','small_square','micro_square'],nargs=1)
-    args = parser.parse_args()
-    if args.action == 'help':
-        parser.print_help()
+    stringArg = "pull --path playground"
+    args = parser.parse_args(stringArg.split())
+    
     exeCli(args)
 
     closePlaywrightPage()
