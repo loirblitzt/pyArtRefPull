@@ -1,10 +1,6 @@
 #from urllib import response
-from ast import arg
-import json
-from multiprocessing import context
 import re
 from time import sleep
-from numpy import true_divide
 from yaml import load, dump, Loader, Dumper
 import csv
 
@@ -164,7 +160,7 @@ def loadCacheFile(path,name=".artrefcache.csv"):
     csvColumns = None
     artDictionnary = {}
     if os.path.exists(os.path.join(path, name)) and os.path.isfile(os.path.join(path, name)):
-        with open(os.path.join(path,name),'r') as csvFile:
+        with open(os.path.join(path, name), 'r', encoding='utf-8-sig') as csvFile:
             csvReader = csv.reader(csvFile,delimiter=',')
             isFirst = False #NOTE: this is for disabling first line
             i = 0
@@ -188,7 +184,7 @@ def loadCacheFile(path,name=".artrefcache.csv"):
 
 def saveCacheFile(path, data, name=".artrefcache.csv"):
     retValue = False
-    with open(os.path.join(path, name),'w') as csvFile:
+    with open(os.path.join(path, name), 'w', encoding='utf-8-sig') as csvFile:
         csvWriter = csv.writer(csvFile, delimiter=',')
         csvWriter.writerows(data)
         retValue = True
@@ -376,7 +372,7 @@ def getProjectsFromPostSource(source, cacheObj):
 
 
 def getNamingVariables(jsonObj, asset,project):
-    minIdCategory = jsonObj["categories"][0]["id"]
+    minIdCategory = jsonObj["categories"][0]["id"] if len(jsonObj["categories"]) >0 else None
     currentIndex = 0
     minCategoryIndex = 0
     for cat in jsonObj["categories"]:
@@ -390,10 +386,11 @@ def getNamingVariables(jsonObj, asset,project):
         "title": jsonObj["title"] if len(jsonObj["title"].split(' ')) <= 4 else jsonObj["slug"],
         "subtitle": asset["title"] if asset["title"] is not None else "" ,
         "likes": str(jsonObj["likes_count"]),
-        "source": "_".join(load(project[cacheColumns.index("protosources")],Loader=Loader)).replace("\\","-"),
+        #"source": "_".join(load(project[cacheColumns.index("protosources")],Loader=Loader)).replace("\\","-"),
+        "source": "_".join(load(str(project[cacheColumns.index("protosources")]),Loader=Loader)).replace("\\", "-").replace("/","~") ,
         "size": project[cacheColumns.index("default_size")],
         "subId" : str(asset["position"]),
-        "category": jsonObj["categories"][minCategoryIndex]["name"],
+        "category": jsonObj["categories"][minCategoryIndex]["name"] if minIdCategory is not None else "None",
         "views_count": str(jsonObj["views_count"]),
         "comments_count": str(jsonObj["comments_count"]),
         "ext" : "jpg"
@@ -421,7 +418,7 @@ def addImagesToList(imageList : list, jsonObj,projectIdx,projectObj, naming_conv
     return imageList
 
 def getProjectsIndexByStatus(cacheObj, status):
-    return [elementIndex for elementIndex in range(len(cacheObj[0])) if cacheObj[0][elementIndex][0] == str(status)]
+    return [elementIndex for elementIndex in range(len(cacheObj[0])) if int(cacheObj[0][elementIndex][0]) == int(status)]
 # ------------ main cli functions
 
 def logger(message,category):
@@ -495,7 +492,8 @@ def downloadPending(path,args=None,cache=None,preferedSize=None):
     for requestObj in as_completed(futures_images):
         response = requestObj.result()
         #download image
-        with open(os.path.join(path,requestObj.imgName),'wb') as imgfile:
+        imageName = requestObj.imgName.replace("/","~").replace("\\","-")
+        with open(os.path.join(path,imageName),'wb') as imgfile:
             imgfile.write(response.content)
         #set processed (write over with all other info from request)
         cacheObj[0][requestObj.projectIdx][cacheColumns.index("status")] = 1
@@ -553,8 +551,8 @@ if __name__ == "__main__":
     parser.add_argument("--path",type=str,default='.')
     parser.add_argument("--src",type=str,action="append",nargs=2,metavar=("srcType","value"),help="when in [createLib,write2lib] mode, specify what sources to write to lib config file")
     parser.add_argument("--default_size",type=str,choices=['small','medium','large','4k','small_square','micro_square'],nargs=1)
-    stringArg = "pull --path playground"
-    args = parser.parse_args(stringArg.split())
+
+    args = parser.parse_args()
     
     exeCli(args)
 

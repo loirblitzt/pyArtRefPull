@@ -1,0 +1,27 @@
+---
+#sample libsetting file in yaml format to decide basic content
+sources:
+  - type: Not
+    value : not
+  # - type: collection
+  #   value: username/collectionName
+  # - type: collection
+  #   value: 310180
+  # - type: collection
+  #   value: username
+  # - type: artist
+  #   value: username
+  # - type: project
+  #   value: 2qWPDK
+default-size: medium
+naming_convention: "{artist}_{title}_{subtitle}_{likes}_{source}_{size}_{subId}_{category}" #format style
+#last_fetch: HH:MM DD-MM-YYYY #maybe useless
+# exclude_sources: #not implemented yet
+#   - type : collection
+#     value: username/likes
+ignore-cache: false
+just-cache: false
+# log-settings: #not implemented yet
+#   fetch-verbose-level: 1 #0...2
+#   pull-verbose-level: 1
+#   do-save-log: false
