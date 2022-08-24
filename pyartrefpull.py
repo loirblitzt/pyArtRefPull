@@ -1,8 +1,10 @@
 #from urllib import response
+from random import randint, random
 import re
 from time import sleep
 from yaml import load, dump, Loader, Dumper
 import csv
+import sys
 
 import argparse
 import requests
@@ -493,11 +495,32 @@ def downloadPending(path,args=None,cache=None,preferedSize=None):
         response = requestObj.result()
         #download image
         imageName = requestObj.imgName.replace("/","~").replace("\\","-")
+        invalidChar = ["<", ">", ":", '"', "/", "|", "?", "*"]
+        for ch in invalidChar:
+            imageName = imageName.replace(ch,"")
         with open(os.path.join(path,imageName),'wb') as imgfile:
             imgfile.write(response.content)
         #set processed (write over with all other info from request)
         cacheObj[0][requestObj.projectIdx][cacheColumns.index("status")] = 1
     return cacheObj
+
+def chooseRandomImg(path):
+    files = os.listdir(path)
+    possibleFiles = []
+    for potentialFile in files:
+        fileExtAccepted = [potentialFile.lower().endswith(ext) for ext in [".png",".jpg"]]
+        if True in fileExtAccepted:
+            possibleFiles.append(potentialFile)
+    randIdx = randint(0,len(possibleFiles))
+    chosenFile = possibleFiles[randIdx]
+    print(f"choose : {chosenFile}")
+    print("do you want to open it with default image viewer [Y/n]")
+    choice = input()
+    if choice.lower().strip() != "n":
+        imageViewerFromCommandLine = {'linux':'xdg-open',
+                                      'win32':'start',
+                                      'darwin':'open'}[sys.platform]
+        os.system(f"{imageViewerFromCommandLine} {os.path.join(path,chosenFile)}")
 
 def buildOverviewWebpage(path):
     pass
@@ -539,11 +562,14 @@ def exeCli(args):
                 sources.append({"type": src[0], "value": src[1]})
             config["sources"] = sources
         writeLibrarySettings(args.path, config)
+    elif args.action == 'choseRandImg':
+        chooseRandomImg(args.path)
+
         
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Maintain a image reference librairy from artstation')
-    parser.add_argument("action", nargs='?', type=str,choices=['fetch','update','pull','createLib','write2lib'],help='choose the specified action on the library')
+    parser.add_argument("action", nargs='?', type=str,choices=['fetch','update','pull','createLib','write2lib','choseRandImg'],help='choose the specified action on the library')
     parser.add_argument(
         "--ignoreCache",action = "store_true", help="ignore the cache file during operations (for experienced user only)")
     parser.add_argument(
